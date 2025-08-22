@@ -6,7 +6,7 @@
 
     <groupId>com.sunya13</groupId>
     <artifactId>serverless-todo-api-java</artifactId>
-    <version>0.00.00</version>
+    <version>1.00.00</version>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
