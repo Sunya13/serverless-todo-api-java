@@ -1,13 +1,10 @@
 package com.sunya13.model;
 
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey;
-
-import java.time.Instant;
-import java.time.LocalDate;
-import java.util.UUID;
 
 /**
  * Represents a single to-do item in the DynamoDB table.
@@ -20,13 +17,7 @@ public class TodoItem {
     private Boolean completed;
     private String createdAt;
     private String updatedAt;
-
-    public TodoItem() {
-        this.todoId = UUID.randomUUID().toString();
-        this.completed = false;
-        this.createdAt = Instant.now().toString();
-        this.updatedAt = this.createdAt;
-    }
+    private String GSI_PK; // Field for the GSI Partition Key
 
     @DynamoDbPartitionKey
     public String getTodoId() {
@@ -71,8 +62,12 @@ public class TodoItem {
     }
 
     @DynamoDbSecondaryPartitionKey(indexNames = "UpdatedAtIndex")
+    @DynamoDbAttribute("GSI_PK") // This annotation fixes the name mismatch
     public String getGSI_PK() {
-        // A static value for the GSI partition key
-        return "todo";
+        return GSI_PK;
+    }
+
+    public void setGSI_PK(String GSI_PK) {
+        this.GSI_PK = GSI_PK;
     }
 }

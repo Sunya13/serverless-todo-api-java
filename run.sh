@@ -48,8 +48,8 @@ create_lambda_from_jar() {
       --handler "$handler_class" \
       --timeout 30 \
       --memory-size 1024 \
-      --environment "Variables={JAVA_TOOL_OPTIONS=-Xmx512m}" \
       --role $LAMBDA_ROLE \
+      --environment "Variables={JAVA_TOOL_OPTIONS=-Xmx512m,TABLE_NAME=${TABLE_NAME},AWS_ENDPOINT_URL=${ENDPOINT_URL},AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}}" \
       --endpoint-url $ENDPOINT_URL \
       --region $AWS_DEFAULT_REGION
   echo "  -> Function created successfully!"
@@ -81,61 +81,94 @@ wait_for_lambda "updateTodoFunction"
 create_lambda_from_jar "deleteTodoFunction" "com.sunya13.handlers.DeleteTodoHandler::handleRequest"
 wait_for_lambda "deleteTodoFunction"
 
+echo "--- All functions deployed successfully! Pausing before tests... ---"
+sleep 10
+
+# --- Testing API Endpoints ---
 echo "--- Testing API Endpoints ---"
+
+# Create a directory inside target to store test results
+mkdir -p target/test-results
 
 # --- Create a To-Do Item (POST) ---
 echo "Testing POST /todos..."
-echo "  -> Invoking createTodoFunction with payload: '{\"body\":\"{\\\"title\\\":\\\"Test with script\\\"}\"}'"
 aws lambda invoke \
     --function-name createTodoFunction \
     --payload '{"body":"{\"title\":\"Test with script\"}"}' \
     --endpoint-url $ENDPOINT_URL \
-    --region $AWS_DEFAULT_REGION \
-    --cli-binary-format raw-in-base64-out  output-create.json > /dev/null
-CREATE_RESPONSE_JSON=$(cat output-create.json)
-echo "  -> POST Response: $CREATE_RESPONSE_JSON"
-CREATED_TODO_ID=$(echo "$CREATE_RESPONSE_JSON" | grep -o '"todoId":"[^"]*"' | cut -d'"' -f4)
-echo "  -> Created To-Do ID: $CREATED_TODO_ID"
+    --cli-binary-format raw-in-base64-out \
+    target/test-results/create_response.json
+
+CREATE_RESPONSE=$(cat target/test-results/create_response.json)
+CREATE_STATUS_CODE=$(echo "$CREATE_RESPONSE" | jq -r '.statusCode')
+if [ "$CREATE_STATUS_CODE" -ne 201 ]; then
+    echo "Error: CreateTodoHandler failed with status code $CREATE_STATUS_CODE"
+    echo "Response: $CREATE_RESPONSE"
+    exit 1
+fi
+echo "  -> POST Test Passed!"
+CREATED_TODO_ID=$(echo "$CREATE_RESPONSE" | jq -r '.body | fromjson | .todoId')
+
+# Add a check to ensure the ID was created
+if [ -z "$CREATED_TODO_ID" ] || [ "$CREATED_TODO_ID" == "null" ]; then
+    echo "Error: Failed to create a new To-Do item. ID is null."
+    exit 1
+fi
 
 # --- Get All To-Do Items (GET) ---
 echo "Testing GET /todos..."
-echo "  -> Invoking getAllTodosFunction with empty payload"
 aws lambda invoke \
     --function-name getAllTodosFunction \
     --payload '{}' \
     --endpoint-url $ENDPOINT_URL \
-    --region $AWS_DEFAULT_REGION \
     --cli-binary-format raw-in-base64-out \
-    output-getall.json > /dev/null
-GET_ALL_RESPONSE_JSON=$(cat output-getall.json)
-echo "  -> GET All Response: $GET_ALL_RESPONSE_JSON"
+    target/test-results/get_all_response.json
+
+GET_RESPONSE=$(cat target/test-results/get_all_response.json)
+GET_STATUS_CODE=$(echo "$GET_RESPONSE" | jq -r '.statusCode')
+if [ "$GET_STATUS_CODE" -ne 200 ]; then
+    echo "Error: GetAllTodosHandler failed with status code $GET_STATUS_CODE"
+    echo "Response: $GET_RESPONSE"
+    exit 1
+fi
+echo "  -> GET Test Passed!"
 
 # --- Update the To-Do Item (PUT) ---
 echo "Testing PUT /todos/{todoId}..."
 UPDATE_PAYLOAD='{"pathParameters":{"todoId":"'$CREATED_TODO_ID'"},"body":"{\"completed\":true}"}'
-echo "  -> Invoking updateTodoFunction with payload: $UPDATE_PAYLOAD"
 aws lambda invoke \
     --function-name updateTodoFunction \
     --payload "$UPDATE_PAYLOAD" \
     --endpoint-url $ENDPOINT_URL \
-    --region $AWS_DEFAULT_REGION \
     --cli-binary-format raw-in-base64-out \
-    output-update.json > /dev/null
-UPDATE_RESPONSE_JSON=$(cat output-update.json)
-echo "  -> PUT Response: $UPDATE_RESPONSE_JSON"
+    target/test-results/update_response.json
+
+UPDATE_RESPONSE=$(cat target/test-results/update_response.json)
+UPDATE_STATUS_CODE=$(echo "$UPDATE_RESPONSE" | jq -r '.statusCode')
+if [ "$UPDATE_STATUS_CODE" -ne 200 ]; then
+    echo "Error: UpdateTodoHandler failed with status code $UPDATE_STATUS_CODE"
+    echo "Response: $UPDATE_RESPONSE"
+    exit 1
+fi
+echo "  -> PUT Test Passed!"
 
 # --- Delete the To-Do Item (DELETE) ---
 echo "Testing DELETE /todos/{todoId}..."
 DELETE_PAYLOAD='{"pathParameters":{"todoId":"'$CREATED_TODO_ID'"}}'
-echo "  -> Invoking deleteTodoFunction with payload: $DELETE_PAYLOAD"
 aws lambda invoke \
     --function-name deleteTodoFunction \
     --payload "$DELETE_PAYLOAD" \
     --endpoint-url $ENDPOINT_URL \
-    --region $AWS_DEFAULT_REGION \
     --cli-binary-format raw-in-base64-out \
-    output-delete.json > /dev/null
-DELETE_RESPONSE_JSON=$(cat output-delete.json)
-echo "  -> DELETE Response: $DELETE_RESPONSE_JSON"
+    target/test-results/delete_response.json
+
+DELETE_RESPONSE=$(cat target/test-results/delete_response.json)
+DELETE_STATUS_CODE=$(echo "$DELETE_RESPONSE" | jq -r '.statusCode')
+if [ "$DELETE_STATUS_CODE" -ne 200 ]; then
+    echo "Error: DeleteTodoHandler failed with status code $DELETE_STATUS_CODE"
+    echo "Response: $DELETE_RESPONSE"
+    exit 1
+fi
+echo "  -> DELETE Test Passed!"
 
 echo "--- All tests completed successfully! ---"

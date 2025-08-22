@@ -1,0 +1,19 @@
+name: Java CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build, Run, and Test
+        run: |
+          # This single command starts all services, runs the tests,
+          # and exits with the test container's status code.
+          docker-compose -f docker-compose.yml up --build --abort-on-container-exit --exit-code-from lambda-runner
