@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # LocalStack service to emulate AWS services
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566" # The default LocalStack port
+    environment:
+      - SERVICES=lambda,dynamodb # We only need these services for this test
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./.localstack:/var/lib/localstack" # Persist LocalStack data
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  # Lambda runner service to execute our test script
+  lambda-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lambda-runner
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    volumes:
+      - .:/app
+    depends_on:
+      - localstack
+    command: ["/app/run.sh"]
