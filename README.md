@@ -40,7 +40,7 @@ Start the test environment:
 
 Bash
 
-```docker-compose up --build```
+```docker compose up --build```
 
 
 This single command will:
